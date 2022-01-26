@@ -1,21 +1,6 @@
-// SPDX-License-Identifier: MIT
+//SPDX-License-Identifier: UNLICENSED
 
-//  /$$$$$$$   /$$$$$$  /$$       /$$        /$$$$$$   /$$$$$$
-// | $$__  $$ /$$__  $$| $$      | $$       /$$__  $$ /$$__  $$
-// | $$  \ $$| $$  \ $$| $$      | $$      | $$  \ $$| $$  \__/
-// | $$$$$$$/| $$$$$$$$| $$      | $$      | $$$$$$$$|  $$$$$$
-// | $$____/ | $$__  $$| $$      | $$      | $$__  $$ \____  $$
-// | $$      | $$  | $$| $$      | $$      | $$  | $$ /$$  \ $$
-// | $$      | $$  | $$| $$$$$$$$| $$$$$$$$| $$  | $$|  $$$$$$/
-// |__/      |__/  |__/|________/|________/|__/  |__/ \______/
-
-// Next-gen Autostaking Mechanism - https://pallas.finance
-
-pragma solidity ^0.8.10;
-
-import "@openzeppelin/contracts/interfaces/IERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+pragma solidity 0.7.6;
 
 library SafeMathInt {
     int256 private constant MIN_INT256 = int256(1) << 255;
@@ -53,13 +38,97 @@ library SafeMathInt {
     }
 }
 
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address who) external view returns (uint256);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
+
+library SafeMath {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "SafeMath: addition overflow");
+
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+
+    function sub(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    function div(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+
+        return c;
+    }
+
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b != 0);
+        return a % b;
+    }
+}
+
 interface InterfaceLP {
     function sync() external;
 }
 
 library Roles {
     struct Role {
-        mapping(address => bool) bearer;
+        mapping (address => bool) bearer;
     }
 
     /**
@@ -82,11 +151,7 @@ library Roles {
      * @dev Check if an account has this role.
      * @return bool
      */
-    function has(Role storage role, address account)
-        internal
-        view
-        returns (bool)
-    {
+    function has(Role storage role, address account) internal view returns (bool) {
         require(account != address(0), "Roles: account is the zero address");
         return role.bearer[account];
     }
@@ -100,15 +165,12 @@ contract MinterRole {
 
     Roles.Role private _minters;
 
-    constructor() {
+    constructor () {
         _addMinter(msg.sender);
     }
 
     modifier onlyMinter() {
-        require(
-            isMinter(msg.sender),
-            "MinterRole: caller does not have the Minter role"
-        );
+        require(isMinter(msg.sender), "MinterRole: caller does not have the Minter role");
         _;
     }
 
@@ -137,13 +199,13 @@ abstract contract ERC20Detailed is IERC20 {
     uint8 private _decimals;
 
     constructor(
-        string memory __name,
-        string memory __symbol,
-        uint8 __decimals
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_
     ) {
-        _name = __name;
-        _symbol = __symbol;
-        _decimals = __decimals;
+        _name = name_;
+        _symbol = symbol_;
+        _decimals = decimals_;
     }
 
     function name() public view returns (string memory) {
@@ -159,223 +221,262 @@ abstract contract ERC20Detailed is IERC20 {
     }
 }
 
-interface IJoeRouter01 {
-    function factory() external pure returns (address);
+interface IPangolinFactory {
+    event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
+    function feeTo() external view returns (address);
+    function feeToSetter() external view returns (address);
+
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
+    function allPairs(uint) external view returns (address pair);
+    function allPairsLength() external view returns (uint);
+
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+
+    function setFeeTo(address) external;
+    function setFeeToSetter(address) external;
+}
+
+interface IPangolinRouter {
+    function factory() external pure returns (address);
     function WAVAX() external pure returns (address);
 
     function addLiquidity(
         address tokenA,
         address tokenB,
-        uint256 amountADesired,
-        uint256 amountBDesired,
-        uint256 amountAMin,
-        uint256 amountBMin,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
         address to,
-        uint256 deadline
-    )
-        external
-        returns (
-            uint256 amountA,
-            uint256 amountB,
-            uint256 liquidity
-        );
-
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
     function addLiquidityAVAX(
         address token,
-        uint256 amountTokenDesired,
-        uint256 amountTokenMin,
-        uint256 amountAVAXMin,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountAVAXMin,
         address to,
-        uint256 deadline
-    )
-        external
-        payable
-        returns (
-            uint256 amountToken,
-            uint256 amountAVAX,
-            uint256 liquidity
-        );
-
+        uint deadline
+    ) external payable returns (uint amountToken, uint amountAVAX, uint liquidity);
     function removeLiquidity(
         address tokenA,
         address tokenB,
-        uint256 liquidity,
-        uint256 amountAMin,
-        uint256 amountBMin,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
         address to,
-        uint256 deadline
-    ) external returns (uint256 amountA, uint256 amountB);
-
+        uint deadline
+    ) external returns (uint amountA, uint amountB);
     function removeLiquidityAVAX(
         address token,
-        uint256 liquidity,
-        uint256 amountTokenMin,
-        uint256 amountAVAXMin,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountAVAXMin,
         address to,
-        uint256 deadline
-    ) external returns (uint256 amountToken, uint256 amountAVAX);
-
+        uint deadline
+    ) external returns (uint amountToken, uint amountAVAX);
     function removeLiquidityWithPermit(
         address tokenA,
         address tokenB,
-        uint256 liquidity,
-        uint256 amountAMin,
-        uint256 amountBMin,
+        uint liquidity,
+        uint amountAMin,
+        uint amountBMin,
         address to,
-        uint256 deadline,
-        bool approveMax,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external returns (uint256 amountA, uint256 amountB);
-
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountA, uint amountB);
     function removeLiquidityAVAXWithPermit(
         address token,
-        uint256 liquidity,
-        uint256 amountTokenMin,
-        uint256 amountAVAXMin,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountAVAXMin,
         address to,
-        uint256 deadline,
-        bool approveMax,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external returns (uint256 amountToken, uint256 amountAVAX);
-
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountToken, uint amountAVAX);
     function swapExactTokensForTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
+        uint amountIn,
+        uint amountOutMin,
         address[] calldata path,
         address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
+        uint deadline
+    ) external returns (uint[] memory amounts);
     function swapTokensForExactTokens(
-        uint256 amountOut,
-        uint256 amountInMax,
+        uint amountOut,
+        uint amountInMax,
         address[] calldata path,
         address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
-    function swapExactAVAXForTokens(
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external payable returns (uint256[] memory amounts);
-
-    function swapTokensForExactAVAX(
-        uint256 amountOut,
-        uint256 amountInMax,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
-    function swapExactTokensForAVAX(
-        uint256 amountIn,
-        uint256 amountOutMin,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external returns (uint256[] memory amounts);
-
-    function swapAVAXForExactTokens(
-        uint256 amountOut,
-        address[] calldata path,
-        address to,
-        uint256 deadline
-    ) external payable returns (uint256[] memory amounts);
-
-    function quote(
-        uint256 amountA,
-        uint256 reserveA,
-        uint256 reserveB
-    ) external pure returns (uint256 amountB);
-
-    function getAmountOut(
-        uint256 amountIn,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) external pure returns (uint256 amountOut);
-
-    function getAmountIn(
-        uint256 amountOut,
-        uint256 reserveIn,
-        uint256 reserveOut
-    ) external pure returns (uint256 amountIn);
-
-    function getAmountsOut(uint256 amountIn, address[] calldata path)
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapExactAVAXForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline)
         external
-        view
-        returns (uint256[] memory amounts);
-
-    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        payable
+        returns (uint[] memory amounts);
+    function swapTokensForExactAVAX(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
         external
-        view
-        returns (uint256[] memory amounts);
-}
+        returns (uint[] memory amounts);
+    function swapExactTokensForAVAX(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
+        external
+        returns (uint[] memory amounts);
+    function swapAVAXForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
+        external
+        payable
+        returns (uint[] memory amounts);
 
-// File: contracts/traderjoe/interfaces/IJoeRouter02.sol
+    function quote(uint amountA, uint reserveA, uint reserveB) external pure returns (uint amountB);
+    function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure returns (uint amountOut);
+    function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure returns (uint amountIn);
+    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+    function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
 
-pragma solidity >=0.6.2;
-
-interface IJoeRouter02 is IJoeRouter01 {
     function removeLiquidityAVAXSupportingFeeOnTransferTokens(
         address token,
-        uint256 liquidity,
-        uint256 amountTokenMin,
-        uint256 amountAVAXMin,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountAVAXMin,
         address to,
-        uint256 deadline
-    ) external returns (uint256 amountAVAX);
-
+        uint deadline
+    ) external returns (uint amountAVAX);
     function removeLiquidityAVAXWithPermitSupportingFeeOnTransferTokens(
         address token,
-        uint256 liquidity,
-        uint256 amountTokenMin,
-        uint256 amountAVAXMin,
+        uint liquidity,
+        uint amountTokenMin,
+        uint amountAVAXMin,
         address to,
-        uint256 deadline,
-        bool approveMax,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external returns (uint256 amountAVAX);
+        uint deadline,
+        bool approveMax, uint8 v, bytes32 r, bytes32 s
+    ) external returns (uint amountAVAX);
 
     function swapExactTokensForTokensSupportingFeeOnTransferTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
+        uint amountIn,
+        uint amountOutMin,
         address[] calldata path,
         address to,
-        uint256 deadline
+        uint deadline
     ) external;
-
     function swapExactAVAXForTokensSupportingFeeOnTransferTokens(
-        uint256 amountOutMin,
+        uint amountOutMin,
         address[] calldata path,
         address to,
-        uint256 deadline
+        uint deadline
     ) external payable;
-
     function swapExactTokensForAVAXSupportingFeeOnTransferTokens(
-        uint256 amountIn,
-        uint256 amountOutMin,
+        uint amountIn,
+        uint amountOutMin,
         address[] calldata path,
         address to,
-        uint256 deadline
+        uint deadline
     ) external;
 }
 
-interface IDEXFactory {
-    function createPair(address tokenA, address tokenB)
-        external
-        returns (address pair);
+
+interface IPangolinPair {
+    event Approval(address indexed owner, address indexed spender, uint value);
+    event Transfer(address indexed from, address indexed to, uint value);
+
+    function name() external pure returns (string memory);
+    function symbol() external pure returns (string memory);
+    function decimals() external pure returns (uint8);
+    function totalSupply() external view returns (uint);
+    function balanceOf(address owner) external view returns (uint);
+    function allowance(address owner, address spender) external view returns (uint);
+
+    function approve(address spender, uint value) external returns (bool);
+    function transfer(address to, uint value) external returns (bool);
+    function transferFrom(address from, address to, uint value) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+    function nonces(address owner) external view returns (uint);
+
+    function permit(address owner, address spender, uint value, uint deadline, uint8 v, bytes32 r, bytes32 s) external;
+
+    event Mint(address indexed sender, uint amount0, uint amount1);
+    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
+    event Swap(
+        address indexed sender,
+        uint amount0In,
+        uint amount1In,
+        uint amount0Out,
+        uint amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint);
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function price0CumulativeLast() external view returns (uint);
+    function price1CumulativeLast() external view returns (uint);
+    function kLast() external view returns (uint);
+
+    function mint(address to) external returns (uint liquidity);
+    function burn(address to) external returns (uint amount0, uint amount1);
+    function swap(uint amount0Out, uint amount1Out, address to, bytes calldata data) external;
+    function skim(address to) external;
+    function sync() external;
+
+    function initialize(address, address) external;
 }
 
-contract Pallas is ERC20Detailed, Ownable, MinterRole {
+
+// File contracts/pangolin-periphery/interfaces/IWAVAX.sol
+
+pragma solidity >=0.5.0;
+
+interface IWAVAX {
+    function deposit() external payable;
+    function transfer(address to, uint value) external returns (bool);
+    function withdraw(uint) external;
+}
+
+contract Ownable {
+    address private _owner;
+
+    event OwnershipRenounced(address indexed previousOwner);
+
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    constructor() {
+        _owner = msg.sender;
+    }
+
+    function owner() public view returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(isOwner());
+        _;
+    }
+
+    function isOwner() public view returns (bool) {
+        return msg.sender == _owner;
+    }
+
+    function renounceOwnership() public onlyOwner {
+        emit OwnershipRenounced(_owner);
+        _owner = address(0);
+    }
+
+    function transferOwnership(address newOwner) public onlyOwner {
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal {
+        require(newOwner != address(0));
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
+}
+
+contract Caesar is ERC20Detailed, Ownable, MinterRole {
     using SafeMath for uint256;
     using SafeMathInt for int256;
 
@@ -385,15 +486,11 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
 
     bool public initialDistributionFinished;
 
-    mapping(address => bool) private allowTransfer;
-    mapping(address => bool) private _isFeeExempt;
+    mapping(address => bool) allowTransfer;
+    mapping(address => bool) _isFeeExempt;
 
     modifier initialDistributionLock() {
-        require(
-            initialDistributionFinished ||
-                msg.sender == owner() ||
-                allowTransfer[msg.sender]
-        );
+        require(initialDistributionFinished || isOwner() || allowTransfer[msg.sender]);
         _;
     }
 
@@ -404,15 +501,13 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
 
     uint256 private constant DECIMALS = 18;
     uint256 private constant MAX_UINT256 = ~uint256(0);
-    uint256 private constant INITIAL_FRAGMENTS_SUPPLY =
-        4 * 10**9 * 10**DECIMALS;
+    uint256 private constant INITIAL_FRAGMENTS_SUPPLY = 300 * 10**6 * 10**DECIMALS;
 
     uint256 public liquidityFee = 5;
     uint256 public treasuryFee = 3;
     uint256 public riskFreeValueFee = 5;
     uint256 public sellFee = 5;
-    uint256 public totalFee =
-        liquidityFee.add(treasuryFee).add(riskFreeValueFee);
+    uint256 public totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
     uint256 public feeDenominator = 100;
     uint256 public rewardYield = 4189063;
     uint256 public rewardYieldDenominator = 10000000000;
@@ -420,22 +515,22 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
     uint256 public nextRebase = block.timestamp + rebaseFrequency;
     bool public autoRebase = true;
 
-    address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
-    address internal constant ZERO = 0x0000000000000000000000000000000000000000;
+    address DEAD = 0x000000000000000000000000000000000000dEaD;
+    address ZERO = 0x0000000000000000000000000000000000000000;
 
     address public autoLiquidityReceiver;
     address public treasuryReceiver;
     address public riskFreeValueReceiver;
 
-    uint256 private targetLiquidity = 50;
-    uint256 private targetLiquidityDenominator = 100;
+    uint256 targetLiquidity = 50;
+    uint256 targetLiquidityDenominator = 100;
 
-    IJoeRouter02 public router;
+    IPangolinRouter public router;
     address public pair;
 
     bool public swapEnabled = true;
     uint256 private gonSwapThreshold = (TOTAL_GONS * 10) / 10000;
-    bool internal inSwap;
+    bool inSwap;
     modifier swapping() {
         inSwap = true;
         _;
@@ -459,10 +554,10 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         address _autoLiquidityReceiver,
         address _treasuryReceiver,
         address _riskFreeValueReceiver
-    ) ERC20Detailed("Pallas", "PALLAS", uint8(DECIMALS)) {
-        router = IJoeRouter02(_router);
+    ) ERC20Detailed("Caesar", "$CAESAR", uint8(DECIMALS)) {
+        router = IPangolinRouter(_router);
 
-        pair = IDEXFactory(router.factory()).createPair(
+        pair = IPangolinFactory(router.factory()).createPair(
             router.WAVAX(),
             address(this)
         );
@@ -486,7 +581,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         emit Transfer(address(0x0), treasuryReceiver, _totalSupply);
     }
 
-    function updateBlacklist(address _user, bool _flag) public onlyOwner {
+    function updateBlacklist(address _user, bool _flag) public onlyOwner{
         blacklist[_user] = _flag;
     }
 
@@ -494,10 +589,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         nextRebase = _nextRebase;
     }
 
-    function setRewardYield(
-        uint256 _rewardYield,
-        uint256 _rewardYieldDenominator
-    ) external onlyOwner {
+    function setRewardYield(uint256 _rewardYield, uint256 _rewardYieldDenominator) external onlyOwner {
         rewardYield = _rewardYield;
         rewardYieldDenominator = _rewardYieldDenominator;
     }
@@ -519,10 +611,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         payable(_receiver).transfer(balance);
     }
 
-    function coreRebase(uint256 epoch, int256 supplyDelta)
-        private
-        returns (uint256)
-    {
+    function coreRebase(uint256 epoch, int256 supplyDelta) private returns (uint256) {
         if (supplyDelta == 0) {
             emit LogRebase(epoch, _totalSupply);
             return _totalSupply;
@@ -546,23 +635,17 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
     }
 
     function _rebase() private {
-        if (!inSwap) {
+        if(!inSwap) {
             uint256 epoch = block.timestamp;
             uint256 circulatingSupply = getCirculatingSupply();
-            int256 supplyDelta = int256(
-                circulatingSupply.mul(rewardYield).div(rewardYieldDenominator)
-            );
+            int256 supplyDelta = int256(circulatingSupply.mul(rewardYield).div(rewardYieldDenominator));
 
             coreRebase(epoch, supplyDelta);
             nextRebase = epoch + rebaseFrequency;
         }
     }
 
-    function rebase(uint256 epoch, int256 supplyDelta)
-        external
-        onlyOwner
-        returns (uint256)
-    {
+    function rebase(uint256 epoch, int256 supplyDelta) external onlyOwner returns (uint256) {
         require(!inSwap, "Try again");
         return coreRebase(epoch, supplyDelta);
     }
@@ -616,7 +699,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         address recipient,
         uint256 amount
     ) internal returns (bool) {
-        require(!blacklist[sender] && !blacklist[recipient], "in_blacklist");
+        require(!blacklist[sender] && !blacklist[recipient], 'in_blacklist');
         if (inSwap) {
             return _basicTransfer(sender, recipient, amount);
         }
@@ -642,7 +725,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
             gonAmountReceived.div(_gonsPerFragment)
         );
 
-        if (shouldRebase() && autoRebase) {
+        if(shouldRebase() && autoRebase) {
             _rebase();
         }
 
@@ -694,32 +777,32 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
             block.timestamp
         );
 
-        uint256 amountETH = address(this).balance.sub(balanceBefore);
+        uint256 amountAVAX = address(this).balance.sub(balanceBefore);
 
-        uint256 totalETHFee = totalFee.sub(dynamicLiquidityFee.div(2));
+        uint256 totalAVAXFee = totalFee.sub(dynamicLiquidityFee.div(2));
 
-        uint256 amountETHLiquidity = amountETH
+        uint256 amountAVAXLiquidity = amountAVAX
             .mul(dynamicLiquidityFee)
-            .div(totalETHFee)
+            .div(totalAVAXFee)
             .div(2);
-        uint256 amountETHRiskFreeValue = amountETH.mul(riskFreeValueFee).div(
-            totalETHFee
+        uint256 amountAVAXRiskFreeValue = amountAVAX.mul(riskFreeValueFee).div(totalAVAXFee);
+        uint256 amountAVAXTreasury = amountAVAX.mul(treasuryFee).div(
+            totalAVAXFee
         );
-        uint256 amountETHTreasury = amountETH.mul(treasuryFee).div(totalETHFee);
 
         (bool success, ) = payable(treasuryReceiver).call{
-            value: amountETHTreasury,
+            value: amountAVAXTreasury,
             gas: 30000
         }("");
         (success, ) = payable(riskFreeValueReceiver).call{
-            value: amountETHRiskFreeValue,
+            value: amountAVAXRiskFreeValue,
             gas: 30000
         }("");
 
         success = false;
 
         if (amountToLiquify > 0) {
-            router.addLiquidityAVAX{value: amountETHLiquidity}(
+            router.addLiquidityAVAX{value: amountAVAXLiquidity}(
                 address(this),
                 amountToLiquify,
                 0,
@@ -730,13 +813,9 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         }
     }
 
-    function takeFee(
-        address sender,
-        address recipient,
-        uint256 gonAmount
-    ) internal returns (uint256) {
+    function takeFee(address sender, address recipient, uint256 gonAmount) internal returns (uint256) {
         uint256 _totalFee = totalFee;
-        if (recipient == pair) _totalFee = _totalFee.add(sellFee);
+        if(recipient == pair) _totalFee = _totalFee.add(sellFee);
 
         uint256 feeAmount = gonAmount.mul(_totalFee).div(feeDenominator);
 
@@ -747,7 +826,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
 
         return gonAmount.sub(feeAmount);
     }
-
+    
     function decreaseAllowance(address spender, uint256 subtractedValue)
         external
         initialDistributionLock
@@ -812,11 +891,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         _isFeeExempt[_addr] = true;
     }
 
-    function shouldTakeFee(address from, address to)
-        internal
-        view
-        returns (bool)
-    {
+    function shouldTakeFee(address from, address to) internal view returns (bool) {
         return (pair == from || pair == to) && (!_isFeeExempt[from]);
     }
 
@@ -857,10 +932,7 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
             );
     }
 
-    function setTargetLiquidity(uint256 target, uint256 accuracy)
-        external
-        onlyOwner
-    {
+    function setTargetLiquidity(uint256 target, uint256 accuracy) external onlyOwner {
         targetLiquidity = target;
         targetLiquidityDenominator = accuracy;
     }
@@ -911,20 +983,19 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         require(totalFee < feeDenominator / 4);
     }
 
-    function clearStuckBalance(uint256 amountPercentage, address addr)
-        external
-        onlyOwner
-    {
-        uint256 amountETH = address(this).balance;
-        payable(addr).transfer((amountETH * amountPercentage) / 100);
+    function clearStuckBalance(uint256 amountPercentage, address addr) external onlyOwner {
+        uint256 amountAVAX = address(this).balance;
+        payable(addr).transfer(
+            (amountAVAX * amountPercentage) / 100
+        );
     }
 
-    function rescueToken(address tokenAddress, uint256 tokens)
-        public
-        onlyOwner
-        returns (bool success)
-    {
+    function rescueToken(address tokenAddress, uint256 tokens) public onlyOwner returns (bool success) {
         return ERC20Detailed(tokenAddress).transfer(msg.sender, tokens);
+    }
+
+    function transferToAddressAVAX(address payable recipient, uint256 amount) private {
+        recipient.transfer(amount);
     }
 
     function getLiquidityBacking(uint256 accuracy)
@@ -933,17 +1004,12 @@ contract Pallas is ERC20Detailed, Ownable, MinterRole {
         returns (uint256)
     {
         uint256 liquidityBalance = _gonBalances[pair].div(_gonsPerFragment);
-        return
-            accuracy.mul(liquidityBalance.mul(2)).div(getCirculatingSupply());
+        return accuracy.mul(liquidityBalance.mul(2)).div(getCirculatingSupply());
     }
-
-    function isOverLiquified(uint256 target, uint256 accuracy)
-        public
-        view
-        returns (bool)
-    {
+    
+    function isOverLiquified(uint256 target, uint256 accuracy) public view returns (bool) {
         return getLiquidityBacking(accuracy) > target;
     }
 
-    receive() external payable {this;}
+    receive() external payable {}
 }
