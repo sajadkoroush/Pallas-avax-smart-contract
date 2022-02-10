@@ -4,7 +4,7 @@ require("dotenv").config();
 const Web3 = require("web3");
 const provider = new Provider(process.env.MNEMONIC, process.env.AVAXTESTNET);
 const web3 = new Web3(provider);
-const contractAdd = "0x5970EFF1018F15Bb755c4CEc1703B3a7ab6E0d4F";
+const contractAdd = "0xaE85DAC1f559a8cc8d4F9db1571A6c64EfFF8D50";
 
 const contract = new web3.eth.Contract(Rebase.abi, contractAdd);
 
@@ -16,10 +16,13 @@ const rebase = async () => {
   rewardDenom = await contract.methods.rewardYieldDenominator().call();
   supplyDelta = BigInt((circulatingSupply * rewardYield) / rewardDenom);
 
-  const tx = await contract.methods.rebase(epoch,supplyDelta).send({from: accounts[0]});
+  const tx_rebase = await contract.methods.rebase(epoch,supplyDelta).send({from: accounts[0]});
+  var _rebase = epoch + 1800;
+  const tx_set_nextrebase = await contract.methods.setNextRebase(_rebase).send({from: accounts[0]});
 
   var today = new Date();
-  console.log("Status: " + tx.status);
+  console.log("Status tx_rebase: " + tx_rebase.status);
+  console.log("Status tx_set_nextrebase: " + tx_set_nextrebase.status);
   console.log("Epoch: " + epoch);
   console.log("Supply Delta: " + supplyDelta);
   console.log("Time called: " + today);

@@ -681,6 +681,10 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         return _gonBalances[who].div(_gonsPerFragment);
     }
 
+    function scaledBalanceOf(address who) external view override returns (uint256) {
+        return _gonBalances[who];
+    }
+
     function _basicTransfer(
         address from,
         address to,
