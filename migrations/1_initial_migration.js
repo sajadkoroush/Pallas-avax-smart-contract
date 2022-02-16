@@ -1,11 +1,11 @@
 //const { deployProxy } = require('@openzeppelin/truffle-upgrades');
 const Token = artifacts.require("Caesar");
-const Router = artifacts.require("IPangolinRouter");
+const Router = artifacts.require("IJoeRouter");
 const currTime = Number(Math.round(new Date().getTime() / 1000));
 
 module.exports = async function (deployer, network, accounts) {
 
-  const router = "0x2D99ABD9008Dc933ff5c0CD271B88309593aB921";
+  const router = "0x60aE616a2155Ee3d9A68541Ba4544862310933d4";
   const autoliq = "0xDE76f17adbF21C96aeBbDc103b0cd044D4E178BF"; //partnership
   const treasury = accounts[0];
   const riskFree = "0x976e8ec117ae650139E6eb5c9BA2cC77368D9B52"; //treasury
