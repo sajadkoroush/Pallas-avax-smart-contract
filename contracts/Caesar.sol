@@ -625,9 +625,13 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     uint256 private constant INITIAL_FRAGMENTS_SUPPLY = 300 * 10**6 * 10**DECIMALS;
 
     uint256 public liquidityFee = 5;
+    uint256 private MaxliquidityFee = liquidityFee;
     uint256 public treasuryFee = 3;
+    uint256 private MaxtreasuryFee = treasuryFee;
     uint256 public riskFreeValueFee = 5;
+    uint256 private MaxriskFreeValueFee = riskFreeValueFee;
     uint256 public sellFee = 5;
+    uint256 private MaxsellFee = sellFee;
     uint256 public totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
     uint256 public feeDenominator = 100;
     uint256 public rewardYield = 4189063;
@@ -668,14 +672,14 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     mapping(address => uint256) private _gonBalances;
 
     mapping(address => mapping(address => uint256)) private _allowedFragments;
-    mapping(address => bool) public blacklist;
 
+    
     constructor(
         address _router,
         address _autoLiquidityReceiver,
         address _treasuryReceiver,
         address _riskFreeValueReceiver
-    ) ERC20Detailed("Caesar", "$CAESAR", uint8(DECIMALS)) {
+    ) ERC20Detailed("Caesar V2", "$CAESARV2", uint8(DECIMALS)) {
         router = IJoeRouter(_router);
 
         pair = IJoeFactory(router.factory()).createPair(
@@ -702,9 +706,7 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         emit Transfer(address(0x0), treasuryReceiver, _totalSupply);
     }
 
-    function updateBlacklist(address _user, bool _flag) public onlyOwner{
-        blacklist[_user] = _flag;
-    }
+
 
     function setNextRebase(uint256 _nextRebase) external onlyOwner {
         nextRebase = _nextRebase;
@@ -766,9 +768,9 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         }
     }
 
-    function rebase(uint256 epoch, int256 supplyDelta) external onlyOwner returns (uint256) {
+    function rebase() external onlyOwner {
         require(!inSwap, "Try again");
-        return coreRebase(epoch, supplyDelta);
+         _rebase();
     }
 
     function totalSupply() external view override returns (uint256) {
@@ -824,7 +826,6 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         address recipient,
         uint256 amount
     ) internal returns (bool) {
-        require(!blacklist[sender] && !blacklist[recipient], 'in_blacklist');
         if (inSwap) {
             return _basicTransfer(sender, recipient, amount);
         }
@@ -1020,19 +1021,6 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         return (pair == from || pair == to) && (!_isFeeExempt[from]);
     }
 
-    function mint(address recipient, uint256 amount) external onlyMinter {
-        _totalSupply = _totalSupply.add(uint256(amount));
-
-        if (_totalSupply > MAX_SUPPLY) {
-            _totalSupply = MAX_SUPPLY;
-        }
-
-        _gonsPerFragment = TOTAL_GONS.div(_totalSupply);
-        pairContract.sync();
-
-        _gonBalances[recipient] = _gonBalances[recipient].add(amount);
-    }
-
     function setSwapBackSettings(
         bool _enabled,
         uint256 _num,
@@ -1062,14 +1050,6 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         targetLiquidityDenominator = accuracy;
     }
 
-    function addMinter(address account) public onlyOwner {
-        _addMinter(account);
-    }
-
-    function removeMinter(address account) public onlyOwner {
-        _removeMinter(account);
-    }
-
     function isNotInSwap() external view returns (bool) {
         return !inSwap;
     }
@@ -1092,36 +1072,19 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         riskFreeValueReceiver = _riskFreeValueReceiver;
     }
 
-    function setFees(
-        uint256 _liquidityFee,
-        uint256 _riskFreeValueFee,
-        uint256 _treasuryFee,
-        uint256 _sellFee,
-        uint256 _feeDenominator
-    ) external onlyOwner {
+    function setFees( uint256 _liquidityFee, uint256 _riskFreeValueFee, uint256 _treasuryFee, uint256 _sellFee, uint256 _feeDenominator) external onlyOwner {
+        require(_liquidityFee <= MaxliquidityFee , "You can't set higher than MAX");
+        require(_riskFreeValueFee <= MaxriskFreeValueFee , "You can't set higher than MAX");
+        require(_treasuryFee <= MaxtreasuryFee , "You can't set higher than MAX");
+        require(_sellFee <= MaxsellFee ,"You can't set higher than MAX");
         liquidityFee = _liquidityFee;
         riskFreeValueFee = _riskFreeValueFee;
         treasuryFee = _treasuryFee;
         sellFee = _sellFee;
         totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
         feeDenominator = _feeDenominator;
-        require(totalFee < feeDenominator / 4);
     }
 
-    function clearStuckBalance(uint256 amountPercentage, address addr) external onlyOwner {
-        uint256 amountAVAX = address(this).balance;
-        payable(addr).transfer(
-            (amountAVAX * amountPercentage) / 100
-        );
-    }
-
-    function rescueToken(address tokenAddress, uint256 tokens) public onlyOwner returns (bool success) {
-        return ERC20Detailed(tokenAddress).transfer(msg.sender, tokens);
-    }
-
-    function transferToAddressAVAX(address payable recipient, uint256 amount) private {
-        recipient.transfer(amount);
-    }
 
     function getLiquidityBacking(uint256 accuracy)
         public
