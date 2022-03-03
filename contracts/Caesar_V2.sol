@@ -625,9 +625,13 @@ contract CaesarV2 is ERC20Detailed, Ownable, MinterRole {
     uint256 private constant INITIAL_FRAGMENTS_SUPPLY = 300 * 10**6 * 10**DECIMALS;
 
     uint256 public liquidityFee = 5;
+    uint256 private MaxliquidityFee = liquidityFee;
     uint256 public treasuryFee = 3;
+    uint256 private MaxtreasuryFee = treasuryFee;
     uint256 public riskFreeValueFee = 5;
+    uint256 private MaxriskFreeValueFee = riskFreeValueFee;
     uint256 public sellFee = 5;
+    uint256 private MaxsellFee = sellFee;
     uint256 public totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
     uint256 public feeDenominator = 100;
     uint256 public rewardYield = 4189063;
@@ -1069,14 +1073,16 @@ contract CaesarV2 is ERC20Detailed, Ownable, MinterRole {
     }
 
     function setFees( uint256 _liquidityFee, uint256 _riskFreeValueFee, uint256 _treasuryFee, uint256 _sellFee, uint256 _feeDenominator) external onlyOwner {
+        require(_liquidityFee <= MaxliquidityFee , "You can't set higher than MAX");
+        require(_riskFreeValueFee <= MaxriskFreeValueFee , "You can't set higher than MAX");
+        require(_treasuryFee <= MaxtreasuryFee , "You can't set higher than MAX");
+        require(_sellFee <= MaxsellFee ,"You can't set higher than MAX");
         liquidityFee = _liquidityFee;
         riskFreeValueFee = _riskFreeValueFee;
         treasuryFee = _treasuryFee;
         sellFee = _sellFee;
         totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
         feeDenominator = _feeDenominator;
-        require(totalFee.add(sellFee) <= 25 , "Sell Fee is to High");
-        require(totalFee < feeDenominator / 4);
     }
 
 
