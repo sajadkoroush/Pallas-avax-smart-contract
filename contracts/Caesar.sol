@@ -157,42 +157,6 @@ library Roles {
     }
 }
 
-contract MinterRole {
-    using Roles for Roles.Role;
-
-    event MinterAdded(address indexed account);
-    event MinterRemoved(address indexed account);
-
-    Roles.Role private _minters;
-
-    constructor () {
-        _addMinter(msg.sender);
-    }
-
-    modifier onlyMinter() {
-        require(isMinter(msg.sender), "MinterRole: caller does not have the Minter role");
-        _;
-    }
-
-    function isMinter(address account) public view returns (bool) {
-        return _minters.has(account);
-    }
-
-    function renounceMinter() public {
-        _removeMinter(msg.sender);
-    }
-
-    function _addMinter(address account) internal {
-        _minters.add(account);
-        emit MinterAdded(account);
-    }
-
-    function _removeMinter(address account) internal {
-        _minters.remove(account);
-        emit MinterRemoved(account);
-    }
-}
-
 abstract contract ERC20Detailed is IERC20 {
     string private _name;
     string private _symbol;
@@ -221,8 +185,6 @@ abstract contract ERC20Detailed is IERC20 {
     }
 }
 
-pragma solidity >=0.5.0;
-
 interface IJoeFactory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint256);
 
@@ -246,8 +208,6 @@ interface IJoeFactory {
 
     function setMigrator(address) external;
 }
-
-pragma solidity >=0.6.2;
 
 interface IJoeRouter {
     function factory() external pure returns (address);
@@ -447,8 +407,6 @@ interface IJoeRouter {
     ) external;
 }
 
-pragma solidity >=0.5.0;
-
 interface IJoePair {
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Transfer(address indexed from, address indexed to, uint256 value);
@@ -544,8 +502,6 @@ interface IJoePair {
     function initialize(address, address) external;
 }
 
-pragma solidity >=0.5.0;
-
 interface IWAVAX {
     function deposit() external payable;
 
@@ -597,11 +553,25 @@ contract Ownable {
     }
 }
 
-contract Caesar is ERC20Detailed, Ownable, MinterRole {
+contract Caesar is ERC20Detailed, Ownable {
     using SafeMath for uint256;
     using SafeMathInt for int256;
 
     event LogRebase(uint256 indexed epoch, uint256 totalSupply);
+    event NewNextRebase(uint256 nextRebase);
+    event NewRewardYield(uint256 _rewardYield,uint256 _rewardYieldDenominator);
+    event NewAutoRebase(bool _autoRebase);
+    event NewRebaseFrequency(uint256 _rebaseFrequency);
+    event DustSwiped(address _receiver,uint256 balance);
+    event ManualRebase();
+    event NewLPSet(address _address);
+    event InitialDistributionFinished();
+    event AddressExemptedFromTransferLock(address _addr);
+    event AddressExemptedFromFee(address _addr);
+    event NewSwapBackSet(bool _enabled,uint256 _num,uint256 _denom);
+    event NewTargetLiquiditySet(uint256 target,uint256 accuracy);
+    event NewFeeReceiversSet(address _autoLiquidityReceiver,address _treasuryReceiver,address _riskFreeValueReceiver);
+    event NewFeesSet(uint256 _liquidityFee,uint256 _riskFreeValueFee,uint256 _treasuryFee,uint256 _sellFee,uint256 _feeDenominator);
 
     InterfaceLP public pairContract;
 
@@ -625,13 +595,13 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     uint256 private constant INITIAL_FRAGMENTS_SUPPLY = 300 * 10**6 * 10**DECIMALS;
 
     uint256 public liquidityFee = 5;
-    uint256 private MaxliquidityFee = liquidityFee;
+    uint256 private constant MaxliquidityFee = 5;
     uint256 public treasuryFee = 3;
-    uint256 private MaxtreasuryFee = treasuryFee;
+    uint256 private constant MaxtreasuryFee = 3;
     uint256 public riskFreeValueFee = 5;
-    uint256 private MaxriskFreeValueFee = riskFreeValueFee;
+    uint256 private constant MaxriskFreeValueFee = 5;
     uint256 public sellFee = 5;
-    uint256 private MaxsellFee = sellFee;
+    uint256 private constant MaxsellFee = 5;
     uint256 public totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
     uint256 public feeDenominator = 100;
     uint256 public rewardYield = 4189063;
@@ -640,8 +610,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     uint256 public nextRebase = block.timestamp + rebaseFrequency;
     bool public autoRebase = true;
 
-    address DEAD = 0x000000000000000000000000000000000000dEaD;
-    address ZERO = 0x0000000000000000000000000000000000000000;
+    address constant DEAD = 0x000000000000000000000000000000000000dEaD;
+    address constant ZERO = 0x0000000000000000000000000000000000000000;
 
     address public autoLiquidityReceiver;
     address public treasuryReceiver;
@@ -650,8 +620,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     uint256 targetLiquidity = 50;
     uint256 targetLiquidityDenominator = 100;
 
-    IJoeRouter public router;
-    address public pair;
+    IJoeRouter public immutable router;
+    address public immutable pair;
 
     bool public swapEnabled = true;
     uint256 private gonSwapThreshold = (TOTAL_GONS * 10) / 10000;
@@ -682,17 +652,19 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     ) ERC20Detailed("Caesar V2", "$CAESARV2", uint8(DECIMALS)) {
         router = IJoeRouter(_router);
 
-        pair = IJoeFactory(router.factory()).createPair(
-            router.WAVAX(),
+        address _pair = IJoeFactory(IJoeRouter(_router).factory()).createPair(
+            IJoeRouter(_router).WAVAX(),
             address(this)
         );
+
+        pair = _pair;
 
         autoLiquidityReceiver = _autoLiquidityReceiver;
         treasuryReceiver = _treasuryReceiver;
         riskFreeValueReceiver = _riskFreeValueReceiver;
 
-        _allowedFragments[address(this)][address(router)] = ~uint256(0);
-        pairContract = InterfaceLP(pair);
+        _allowedFragments[address(this)][address(_router)] = ~uint256(0);
+        pairContract = InterfaceLP(_pair);
 
         _totalSupply = INITIAL_FRAGMENTS_SUPPLY;
         _gonBalances[treasuryReceiver] = TOTAL_GONS;
@@ -710,19 +682,27 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
 
     function setNextRebase(uint256 _nextRebase) external onlyOwner {
         nextRebase = _nextRebase;
+
+        emit NewNextRebase(_nextRebase);
     }
 
     function setRewardYield(uint256 _rewardYield, uint256 _rewardYieldDenominator) external onlyOwner {
         rewardYield = _rewardYield;
         rewardYieldDenominator = _rewardYieldDenominator;
+
+        emit NewRewardYield(_rewardYield,_rewardYieldDenominator);
     }
 
     function setAutoRebase(bool _autoRebase) external onlyOwner {
         autoRebase = _autoRebase;
+
+        emit NewAutoRebase(_autoRebase);
     }
 
     function setRebaseFrequency(uint256 _rebaseFrequency) external onlyOwner {
         rebaseFrequency = _rebaseFrequency;
+
+        emit NewRebaseFrequency(_rebaseFrequency);
     }
 
     function shouldRebase() public view returns (bool) {
@@ -732,6 +712,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     function swipe(address _receiver) external onlyOwner {
         uint256 balance = address(this).balance;
         payable(_receiver).transfer(balance);
+
+        emit DustSwiped(_receiver,balance);
     }
 
     function coreRebase(uint256 epoch, int256 supplyDelta) private returns (uint256) {
@@ -771,6 +753,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     function rebase() external onlyOwner {
         require(!inSwap, "Try again");
          _rebase();
+
+         emit ManualRebase();
     }
 
     function totalSupply() external view override returns (uint256) {
@@ -791,6 +775,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     function setLP(address _address) external onlyOwner {
         pairContract = InterfaceLP(_address);
         _isFeeExempt[_address];
+
+        emit NewLPSet(_address);
     }
 
     function allowance(address owner_, address spender)
@@ -993,6 +979,7 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     function approve(address spender, uint256 value)
         external
         override
+        validRecipient(spender)
         initialDistributionLock
         returns (bool)
     {
@@ -1007,14 +994,20 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
 
     function setInitialDistributionFinished() external onlyOwner {
         initialDistributionFinished = true;
+
+        emit InitialDistributionFinished();
     }
 
     function enableTransfer(address _addr) external onlyOwner {
         allowTransfer[_addr] = true;
+
+        emit AddressExemptedFromTransferLock(_addr);
     }
 
     function setFeeExempt(address _addr) external onlyOwner {
         _isFeeExempt[_addr] = true;
+
+        emit AddressExemptedFromFee(_addr);
     }
 
     function shouldTakeFee(address from, address to) internal view returns (bool) {
@@ -1028,6 +1021,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     ) external onlyOwner {
         swapEnabled = _enabled;
         gonSwapThreshold = TOTAL_GONS.div(_denom).mul(_num);
+
+        emit NewSwapBackSet(_enabled,_num,_denom);
     }
 
     function shouldSwapBack() internal view returns (bool) {
@@ -1048,6 +1043,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
     function setTargetLiquidity(uint256 target, uint256 accuracy) external onlyOwner {
         targetLiquidity = target;
         targetLiquidityDenominator = accuracy;
+
+        emit NewTargetLiquiditySet(target,accuracy);
     }
 
     function isNotInSwap() external view returns (bool) {
@@ -1070,6 +1067,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         autoLiquidityReceiver = _autoLiquidityReceiver;
         treasuryReceiver = _treasuryReceiver;
         riskFreeValueReceiver = _riskFreeValueReceiver;
+
+        emit NewFeeReceiversSet(_autoLiquidityReceiver,_treasuryReceiver,_riskFreeValueReceiver);
     }
 
     function setFees( uint256 _liquidityFee, uint256 _riskFreeValueFee, uint256 _treasuryFee, uint256 _sellFee, uint256 _feeDenominator) external onlyOwner {
@@ -1083,6 +1082,8 @@ contract Caesar is ERC20Detailed, Ownable, MinterRole {
         sellFee = _sellFee;
         totalFee = liquidityFee.add(treasuryFee).add(riskFreeValueFee);
         feeDenominator = _feeDenominator;
+
+        emit NewFeesSet(_liquidityFee,_riskFreeValueFee,_treasuryFee,_sellFee,_feeDenominator);
     }
 
 
